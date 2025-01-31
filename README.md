@@ -7,11 +7,10 @@
 * [Future Work](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#future-work)
 
 ## Overview
-The main goal of this project is to leverage NLP and Machine Learning to classify song lyrics by genre, without needing any audio data. The [dataset](https://www.kaggle.com/datasets/carlosgdcj/genius-song-lyrics-with-language-information) was collected from Genius, and it has around five million records.
+The main goal of this project is to leverage NLP and Machine Learning to classify song lyrics (English) by genre, without needing any audio data. The [dataset](https://www.kaggle.com/datasets/carlosgdcj/genius-song-lyrics-with-language-information) was collected from Genius, and it has around five million records.
 
 ## How it Works
 **1. Data Collection & Cleaning**
-   * Kept only necessary columns (lyrics, tag).
    * Normalized some unnecessarily repeated characters.
    * Removed stopwords, symbols and punctuation.
 
@@ -33,13 +32,13 @@ The main goal of this project is to leverage NLP and Machine Learning to classif
    * Integrated the trained models into a Streamlit web application for easy interaction. 
 
 ## Setup Instructions
-1. Clone the Repository
+**1. Clone the Repository**
 ```
 git clone https://github.com/rmsaah/song-genre-classification.git
 cd song-genre-classification
 ```
 
-2. Install Dependencies
+**2. Install Dependencies**
 ```
 pip install -r requirements.txt
 ```

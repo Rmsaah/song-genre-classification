@@ -1,10 +1,10 @@
 # Song Genre Classification
 
-* [Overview](https://github.com/Rmsaah/song-genre-classification/edit/main/README.md#overview)
-* [How it Works](https://github.com/Rmsaah/song-genre-classification/edit/main/README.md#how-it-works)
-* [Setup Instructions](https://github.com/Rmsaah/song-genre-classification/edit/main/README.md#how-it-works)
-* [Streamlit Application](https://github.com/Rmsaah/song-genre-classification/edit/main/README.md#streamlit-application)
-* [Future Work](https://github.com/Rmsaah/song-genre-classification/edit/main/README.md#future-work)
+* [Overview](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#overview)
+* [How it Works](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#how-it-works)
+* [Setup Instructions](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#setup-instructions)
+* [Streamlit Application](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#streamlit-application)
+* [Future Work](https://github.com/Rmsaah/song-genre-classification?tab=readme-ov-file#future-work)
 
 ## Overview
 The main goal of this project is to leverage NLP and Machine Learning to classify song lyrics by genre, without needing any audio data. The [dataset](https://www.kaggle.com/datasets/carlosgdcj/genius-song-lyrics-with-language-information) was collected from Genius, and it has around five million records.

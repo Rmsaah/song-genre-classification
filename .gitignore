@@ -37,3 +37,40 @@ override.tf.json
 terraform.rc
 
 .gitattributes
+
+# ~~~~~~~~~~~~~~~~ Project ~~~~~~~~~~~~~~~~ #
+
+# Datasets - far too large for git (song_lyrics.csv alone is 9 GB).
+# Download from the Kaggle link in README.md; data/stopwords/ IS tracked.
+data/*
+!data/stopwords/
+!data/stopwords/**
+
+# Oversized training artifacts. Kept locally, deliberately NOT deployed:
+#
+#   random_forest_model.pkl       720 MB - over GitHub's 100 MB file limit, so
+#                                 it cannot be deployed at all. It was also the
+#                                 weakest of the three models (66% vs 68%), so
+#                                 the Streamlit app ships LightGBM + XGBoost.
+#   word2vec_model.model[.npy]    190 MB - the full training model. The app
+#                                 loads models/word2vec.kv instead, which holds
+#                                 only the 8000 vectors the TF-IDF vocabulary
+#                                 can reach (7.8 MB, identical predictions).
+#
+# Keep these files around if you ever want to retrain or rebuild word2vec.kv.
+models/random_forest_model.pkl
+models/word2vec_model.model
+models/word2vec_model.model.*.npy
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.ipynb_checkpoints/

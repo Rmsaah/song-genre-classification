@@ -3,36 +3,43 @@ import joblib
 import numpy as np
 import re
 import nltk
-from gensim.models import Word2Vec
+from gensim.models import KeyedVectors
 
 
 # Ensure NLTK resources are available
-# nltk.download('stopwords')
-# nltk.download('punkt')
-# nltk.download('wordnet')
+@st.cache_resource
+def download_nltk_data():
+    """WordNetLemmatizer needs the wordnet corpus, which nltk does not bundle."""
+    nltk.download('wordnet', quiet=True)
+    nltk.download('omw-1.4', quiet=True)
+
+
+download_nltk_data()
 
 
 # Loading Trained Models
-# Load trained Word2Vec model
-w2v_model = Word2Vec.load("models/word2vec_model.model")
+@st.cache_resource
+def load_models():
+    """Load once and keep in memory, instead of re-reading on every rerun."""
+    # word2vec.kv keeps only the 8000 vectors the TF-IDF vocabulary can reach,
+    # so it is 7.8 MB instead of 190 MB. See README for how to rebuild it.
+    w2v_model = KeyedVectors.load("models/word2vec.kv")
+    tfidf_vectorizer = joblib.load('models/tfidf_vectorizer.pkl')
+    standard_scaler = joblib.load('models/scaler.pkl')
 
-# Load the TF-IDF vectorizer
-tfidf_vectorizer = joblib.load('models/tfidf_vectorizer.pkl')
+    # Random Forest is deliberately left out. The trained model is 720 MB,
+    # which is over GitHub's 100 MB per-file limit, so it cannot be deployed.
+    # LightGBM and XGBoost both scored higher anyway (68% vs 66%).
+    model_paths = {
+        "LightGBM": 'models/lightgbm_model.pkl',
+        "XGradient Boost": 'models/xgboost_model.pkl'
+    }
+    models = {name: joblib.load(path) for name, path in model_paths.items()}
 
-# Load the saved scaler
-standard_scaler = joblib.load('models/scaler.pkl')
+    return w2v_model, tfidf_vectorizer, standard_scaler, models
 
-# Load the saved LightGBM model
-LightGBM_model = joblib.load('models/lightgbm_model.pkl')
 
-# Load the trained models
-model_paths = {
-    "LightGBM": 'models/lightgbm_model.pkl',
-    "XGradient Boost": 'models/xgboost_model.pkl',
-    "Random Forest": 'models/random_forest_model.pkl'
-}
-
-models = {name: joblib.load(path) for name, path in model_paths.items()}
+w2v_model, tfidf_vectorizer, standard_scaler, models = load_models()
 
 
 # ~~~~~~~~~~~~~~~~ Cleaning Functions ~~~~~~~~~~~~~~~~ #
@@ -108,7 +115,7 @@ def compute_weighted_w2v_vector(tokens, model, tfidf_weights, vector_size):
 
     Args:
         tokens (list): List of word tokens.
-        model (Word2Vec): Trained Word2Vec model.
+        model (KeyedVectors): Trained Word2Vec vectors.
         tfidf_weights (dict): Mapping of words to their TF-IDF weights.
         vector_size (int): Dimension of the Word2Vec vectors.
 
@@ -117,9 +124,9 @@ def compute_weighted_w2v_vector(tokens, model, tfidf_weights, vector_size):
     """
     word_vectors = []
     for word in tokens:
-        if word in model.wv and word in tfidf_weights:
+        if word in model and word in tfidf_weights:
             weight = tfidf_weights.get(word, 1.0)  # Default to 1.0 if word not in TF-IDF
-            word_vectors.append(weight * model.wv[word])
+            word_vectors.append(weight * model[word])
     if not word_vectors:
         return np.zeros(vector_size)  # Return zero vector if no valid words
     return np.sum(word_vectors, axis=0)  # Compute the weighted sum

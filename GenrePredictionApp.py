@@ -165,7 +165,10 @@ def preprocess_input(lyrics):
     custom_features = get_custom_features(lyrics)
 
     # combine word2vec features with custom ones
-    combined_features = np.hstack((custom_features, w2v_vector))
+    # Order has to match training (Main.ipynb): Word2Vec first, then handcrafted.
+    # Passing them the other way round silently halves accuracy, since the
+    # scaler and classifiers expect the 250 Word2Vec columns first.
+    combined_features = np.hstack((w2v_vector, custom_features))
 
     return standard_scaler.transform([combined_features])  # Scale the vector
 

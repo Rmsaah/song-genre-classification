@@ -5,6 +5,21 @@ import re
 import nltk
 from gensim.models import KeyedVectors
 
+# Has to be the first Streamlit call in the script.
+st.set_page_config(
+    page_title="Song Genre Classifier",
+    page_icon="🎵",
+    layout="centered",
+)
+
+# The five genres the models were trained on, in LabelEncoder order
+# (country -> 0, pop -> 1, rap -> 2, rb -> 3, rock -> 4; see Main.ipynb).
+GENRES = ["Country", "Pop", "Rap", "RnB", "Rock"]
+GENRE_ICONS = {"Country": "🤠", "Pop": "✨", "Rap": "🎤", "RnB": "🎹", "Rock": "🎸"}
+
+# Accuracy on the held-out 60,000 song test set, from Main.ipynb.
+MODEL_ACCURACY = {"LightGBM": 0.6765, "XGradient Boost": 0.6759}
+
 
 # Ensure NLTK resources are available
 @st.cache_resource
@@ -58,6 +73,7 @@ def normalize(text):
     text = text.lower()
     # remove singing noises
     text = re.sub(r'\bm+\b', ' ', text)
+    text = re.sub(r'\bu+h+\b', ' ', text)
     text = re.sub(r'\bo+h+\b', ' ', text)
     text = re.sub(r'\ba+h+\b', ' ', text)
     text = re.sub(r'\bh+m+\b', ' ', text)
@@ -151,7 +167,12 @@ def get_custom_features(text):
 
 # Input Processing Function
 def preprocess_input(lyrics):
-    """Preprocess user input lyrics and return the feature vector."""
+    """Preprocess user input lyrics and return the feature vector.
+
+    Also returns how many tokens the models actually recognized, so the app can
+    say when there is nothing to go on instead of dressing up a majority-class
+    guess as a prediction. That count is zero for anything not in English.
+    """
     lyrics = normalize(lyrics)
     lyrics = clean_text(lyrics)
     tokens = tokenize_text(lyrics)
@@ -170,34 +191,211 @@ def preprocess_input(lyrics):
     # scaler and classifiers expect the 250 Word2Vec columns first.
     combined_features = np.hstack((w2v_vector, custom_features))
 
-    return standard_scaler.transform([combined_features])  # Scale the vector
+    # Same condition compute_weighted_w2v_vector uses to keep a word.
+    matched = sum(1 for t in tokens if t in w2v_model and t in tfidf_weights)
+
+    return standard_scaler.transform([combined_features]), matched  # Scale the vector
 
 
 # ~~~~~~~~~~~~~~~~ Streamlit web app ~~~~~~~~~~~~~~~~ #
 # command to run the app --> streamlit run GenrePredictionApp.py
-st.title("Lyrics Genre Predictor")
-st.write("Enter the lyrics of a song to predict its genre.")
+
+# Colors are neutral greys with alpha rather than fixed values, so the app
+# reads the same whether the visitor is on Streamlit's light or dark theme.
+st.markdown(
+    """
+    <style>
+    .genre-chips { margin: 0.1rem 0 0.6rem 0; }
+    .genre-chip {
+        display: inline-block;
+        padding: 0.28rem 0.8rem;
+        margin: 0.2rem 0.35rem 0.2rem 0;
+        border-radius: 999px;
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        background: rgba(128, 128, 128, 0.12);
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+    .result-card {
+        border: 1px solid rgba(128, 128, 128, 0.28);
+        border-left: 4px solid #FF4B4B;
+        border-radius: 0.6rem;
+        background: rgba(128, 128, 128, 0.08);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .result-eyebrow {
+        font-size: 0.72rem;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        opacity: 0.6;
+    }
+    .result-genre { font-size: 2rem; font-weight: 700; line-height: 1.3; }
+    .result-conf { font-size: 0.9rem; opacity: 0.75; }
+    .prob-row { display: flex; align-items: center; gap: 0.75rem; margin: 0.45rem 0; }
+    .prob-label { flex: 0 0 7rem; font-size: 0.92rem; }
+    .prob-track {
+        flex: 1 1 auto;
+        min-width: 2rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: rgba(128, 128, 128, 0.18);
+        overflow: hidden;
+    }
+    .prob-fill { height: 100%; border-radius: 999px; background: #FF4B4B; }
+    .prob-value {
+        flex: 0 0 3.4rem;
+        text-align: right;
+        font-size: 0.88rem;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.8;
+    }
+    .prob-row.runner-up .prob-fill { opacity: 0.32; }
+    .prob-row.runner-up .prob-label,
+    .prob-row.runner-up .prob-value { opacity: 0.6; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+with st.sidebar:
+    st.header("About")
+    st.write(
+        "This app guesses a song's genre from its **lyrics alone** - no audio, "
+        "no artist, no release year. It was trained on 300,000 English songs "
+        "scraped from Genius."
+    )
+
+    with st.expander("How it works"):
+        st.markdown(
+            "1. **Clean** - strip section headers like `[Chorus]`, punctuation, "
+            "stopwords and singing noises (*ooh*, *yeah*), then lemmatize.\n"
+            "2. **Vectorize** - turn the words into a 250-dimension Word2Vec "
+            "vector, weighted by TF-IDF so distinctive words count for more.\n"
+            "3. **Add features** - word count, average word length, and how "
+            "often the word *baby* shows up.\n"
+            "4. **Classify** - feed all 253 features to a gradient-boosted "
+            "tree model."
+        )
+
+    with st.expander("How accurate is it?"):
+        st.markdown(
+            "About **68%** overall, but that average hides a lot. The training "
+            "data was mostly Pop and Rap, so the model is far better at those "
+            "than at the rarer genres:\n\n"
+            "| Genre | Correctly found |\n"
+            "| --- | --- |\n"
+            "| 🎤 Rap | 87% |\n"
+            "| ✨ Pop | 86% |\n"
+            "| 🎸 Rock | 22% |\n"
+            "| 🤠 Country | 10% |\n"
+            "| 🎹 RnB | 7% |\n\n"
+            "*Recall on a held-out 60,000 song test set, LightGBM. XGBoost is "
+            "within a couple of points.*"
+        )
+
+st.title("🎵 Song Genre Classifier")
+st.markdown(
+    "Paste the lyrics of a song and find out which genre it most likely belongs "
+    "to - predicted from the words alone, with no audio."
+)
+
+st.markdown("**Genres it can pick from**")
+st.markdown(
+    '<div class="genre-chips">'
+    + "".join(f'<span class="genre-chip">{GENRE_ICONS[g]} {g}</span>' for g in GENRES)
+    + "</div>",
+    unsafe_allow_html=True,
+)
+
+st.info(
+    "**English lyrics only.** The models were trained on English songs, and "
+    "cleaning strips every non-Latin character - lyrics in another language are "
+    "reduced to nothing, so the prediction is meaningless.",
+    icon="🌐",
+)
 
 # User input
-user_input = st.text_area("Song Lyrics", height=250)
+user_input = st.text_area(
+    "Song lyrics",
+    height=260,
+    placeholder=(
+        "Paste the lyrics here...\n\n"
+        "Section headers like [Verse 1] and [Chorus] are fine, they get removed "
+        "automatically."
+    ),
+)
 
 # Model selection
-selected_model_name = st.selectbox("Choose a model for prediction:", list(models.keys()))
+selected_model_name = st.selectbox(
+    "Model",
+    list(models.keys()),
+    help="Both are gradient-boosted tree models, and they score within 0.1% of each other.",
+)
 selected_model = models[selected_model_name]
+st.caption(f"Test-set accuracy: **{MODEL_ACCURACY[selected_model_name]:.1%}**")
 
-if st.button("Predict Genre"):
+if st.button("Predict genre", type="primary", use_container_width=True):
     if not user_input.strip():
-        st.warning("Please enter some lyrics!")
+        st.warning("Please enter some lyrics first.")
     else:
         # Preprocess input
-        input_vector = preprocess_input(user_input)
+        input_vector, matched_words = preprocess_input(user_input)
 
-        # Make prediction
-        prediction = selected_model.predict(input_vector)
+        if matched_words == 0:
+            # Every word was stripped or is out of vocabulary. The model would
+            # still return the majority class, which would be pure noise.
+            st.error(
+                "None of those words are in the model's vocabulary, so there is "
+                "nothing to classify. This almost always means the lyrics are "
+                "not in English.",
+                icon="🚫",
+            )
+        else:
+            if matched_words < 5:
+                st.warning(
+                    f"Only {matched_words} word(s) were recognized, so this is "
+                    "little more than a guess. Try a full set of lyrics.",
+                    icon="⚠️",
+                )
 
-        # Map prediction to genre
-        genre_mapping = {0: 'Country', 1: 'Pop', 2: 'Rap', 3: 'RnB', 4: 'Rock'}  # Adjust based on your label encoding
-        predicted_genre = genre_mapping.get(prediction[0], "Unknown")
+            # Make prediction. Column i of predict_proba is class i, which maps
+            # onto GENRES by the LabelEncoder order noted at the top of the file.
+            probabilities = selected_model.predict_proba(input_vector)[0]
+            ranking = np.argsort(probabilities)[::-1]
+            top_genre = GENRES[int(ranking[0])]
+            confidence = float(probabilities[ranking[0]])
 
-        # Display result
-        st.success(f"The predicted genre is: **{predicted_genre}**")
+            # Display result
+            st.markdown(
+                '<div class="result-card">'
+                '<div class="result-eyebrow">Predicted genre</div>'
+                f'<div class="result-genre">{GENRE_ICONS[top_genre]} {top_genre}</div>'
+                f'<div class="result-conf">{confidence:.0%} confidence</div>'
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+            # All five scores, so a close call is visible rather than hidden.
+            st.markdown("**Full breakdown**")
+            rows = []
+            for rank, index in enumerate(ranking):
+                genre = GENRES[int(index)]
+                probability = float(probabilities[index])
+                css_class = "prob-row" if rank == 0 else "prob-row runner-up"
+                rows.append(
+                    f'<div class="{css_class}">'
+                    f'<div class="prob-label">{GENRE_ICONS[genre]} {genre}</div>'
+                    '<div class="prob-track">'
+                    f'<div class="prob-fill" style="width:{probability * 100:.1f}%"></div>'
+                    "</div>"
+                    f'<div class="prob-value">{probability:.1%}</div>'
+                    "</div>"
+                )
+            st.markdown("".join(rows), unsafe_allow_html=True)
+
+            if confidence < 0.4:
+                st.caption(
+                    "The model is not confident here, so treat the top genre as "
+                    "a weak preference rather than an answer."
+                )
